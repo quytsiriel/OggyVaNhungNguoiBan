@@ -8,6 +8,10 @@ body {
   height: 100vh;
   font-family: 'Baloo 2', cursive, sans-serif;
   position: relative;
+  user-select: none;
+  -webkit-user-select: none;  /* Safari / Chrome cũ */
+  -moz-user-select: none;     /* Firefox */
+  -ms-user-select: none;      /* IE / Edge cũ */
 }
 
 /* Background bá»‹ lĂ m má» sau Tivi */

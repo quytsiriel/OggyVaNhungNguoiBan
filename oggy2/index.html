@@ -764,7 +764,9 @@
       
       /* 🔥 Ngăn chặn con trỏ chuột biến thành dấu bôi đen ở mọi nơi */
       user-select: none; 
-      -webkit-user-select: none; /* Dành cho Safari */
+      -webkit-user-select: none;  /* Safari / Chrome cũ */
+      -moz-user-select: none;     /* Firefox */
+      -ms-user-select: none;      /* IE / Edge cũ */
     }
     /* Lớp bao bọc Tivi và Logo để hút vào tâm màn hình */
     #scene1-ui {

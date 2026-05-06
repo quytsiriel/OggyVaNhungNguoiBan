@@ -274,6 +274,7 @@ let score = 0;
 let lives = 3;
 let reviveTimer = null;
 let lastRoachHitTime = 0;
+let lastJoeyHitTime = 0; // Chống spam click vào Joey
 let bombs = [];
 
 function updateScoreboard() {
@@ -822,8 +823,13 @@ function onDocumentMouseClick(event) {
         }, 10000);
 
         if (hitRoach.userData.name === 'Joey') {
+            // Chống spam click (phải cách nhau ít nhất 400ms mới tính 1 hit)
+            const now = performance.now();
+            if (now - lastJoeyHitTime < 400) return;
+            lastJoeyHitTime = now;
+
             joeyHealth--;
-            speedMultiplier += 0.5; // Tăng tốc độ chung
+            speedMultiplier += 0.3; // Tăng tốc độ chung
             document.getElementById('gameplay-hud').innerText = `Đập trúng JOEY! (Máu: ${joeyHealth}/3)`;
             hitRoach.material.color.setHex(0xff0000); // Lóe đỏ
             setTimeout(() => { if (hitRoach.userData.alive) hitRoach.material.color.setHex(0xffffff); }, 200);
@@ -835,51 +841,8 @@ function onDocumentMouseClick(event) {
                 hitRoach.material.opacity = 0.3;
                 hitRoach.position.y = 0.5; // Dán xuống sàn
                 spawnFloorDecal(hitRoach.position.x, hitRoach.position.z, hitRoach);
-
-                // Các con khác dừng lại do hoảng sợ
-                roaches.forEach(r => r.userData.alive = false);
-
-                phase = 2; // Chuyển sang Phase 2 (Giải đố)
-                document.getElementById('gameplay-hud').innerText = "HẠ GỤC JOEY! Chìa khóa vừa văng ra kìa!";
-
-                // Drop chìa khóa
-                const loader = new GLTFLoader();
-                loader.load('assets/golden_key.glb', (gltf) => {
-                    keyModel = gltf.scene;
-                    keyModel.traverse((child) => { 
-                        if (child.isMesh) { 
-                            child.castShadow = true; 
-                            child.receiveShadow = true; 
-                        } 
-                    });
-                    // Thu lại kích thước ban đầu (nhưng vẫn giữ vị trí cao để không bị che lấp)
-                    keyModel.scale.set(0.01, 0.01, 0.01); 
-                    keyModel.position.copy(hitRoach.position);
-                    keyModel.position.y += 2.5; 
-                    scene3D.add(keyModel);
-
-                    // Tạo một vùng va chạm ẩn (HitBox) lớn hơn để người chơi dễ bấm trúng
-                    const hitGeo = new THREE.SphereGeometry(5, 12, 12);
-                    // QUAN TRỌNG: Phải để visible: true thì Raycaster mới bắt được, nhưng để opacity: 0 để người chơi không thấy
-                    const hitMat = new THREE.MeshBasicMaterial({ 
-                        color: 0xffffff,
-                        transparent: true, 
-                        opacity: 0,
-                        depthWrite: false 
-                    });
-                    keyHitBox = new THREE.Mesh(hitGeo, hitMat);
-                    keyHitBox.position.copy(keyModel.position);
-                    scene3D.add(keyHitBox);
-                }, undefined, (error) => {
-                    console.error("Lỗi tải chìa khóa vàng:", error);
-                    // Fallback: Nếu không tải được model 3D, tạo một khối cầu vàng tạm thời để người chơi vẫn có thể thắng
-                    const geo = new THREE.SphereGeometry(1, 16, 16);
-                    const mat = new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0xffd700 });
-                    keyModel = new THREE.Mesh(geo, mat);
-                    keyModel.position.copy(hitRoach.position);
-                    keyModel.position.y += 2.5;
-                    scene3D.add(keyModel);
-                });
+                
+                checkAllRoachesDead(hitRoach);
             }
         } else {
             // Đập trúng đàn em
@@ -889,7 +852,8 @@ function onDocumentMouseClick(event) {
             hitRoach.position.y = 0.5;
             spawnFloorDecal(hitRoach.position.x, hitRoach.position.z, hitRoach);
             speedMultiplier += 0.2; // Tăng tốc độ con còn lại
-            document.getElementById('gameplay-hud').innerText = `Diệt gọn ${hitRoach.userData.name}! Khá lắm!`;
+            
+            checkAllRoachesDead();
         }
     } else {
         // Đập trượt -> Báo động, gián chạy nhanh hơn
@@ -910,6 +874,58 @@ function onDocumentMouseClick(event) {
         } else {
             spawnHitText(event.clientX, event.clientY, "HỤT! (Chạy nhanh hơn)");
         }
+    }
+}
+
+function checkAllRoachesDead(lastHitObj) {
+    const aliveRoaches = roaches.filter(r => r.userData.alive);
+    
+    if (aliveRoaches.length === 0) {
+        phase = 2; // Chuyển sang Phase 2 (Giải đố)
+        document.getElementById('gameplay-hud').innerText = "TUYỆT VỜI! Đã hạ gục tất cả! Chìa khóa vàng xuất hiện rồi!";
+        document.getElementById('gameplay-hud').style.color = "#f1c40f";
+
+        // Drop chìa khóa tại vị trí con gián cuối cùng bị đập
+        const dropPos = lastHitObj ? lastHitObj.position : new THREE.Vector3(0, 0, 0);
+        
+        const loader = new GLTFLoader();
+        loader.load('assets/golden_key.glb', (gltf) => {
+            keyModel = gltf.scene;
+            keyModel.traverse((child) => { 
+                if (child.isMesh) { 
+                    child.castShadow = true; 
+                    child.receiveShadow = true; 
+                } 
+            });
+            keyModel.scale.set(0.01, 0.01, 0.01); 
+            keyModel.position.copy(dropPos);
+            keyModel.position.y += 2.5; 
+            scene3D.add(keyModel);
+
+            const hitGeo = new THREE.SphereGeometry(5, 12, 12);
+            const hitMat = new THREE.MeshBasicMaterial({ 
+                color: 0xffffff,
+                transparent: true, 
+                opacity: 0,
+                depthWrite: false 
+            });
+            keyHitBox = new THREE.Mesh(hitGeo, hitMat);
+            keyHitBox.position.copy(keyModel.position);
+            scene3D.add(keyHitBox);
+        }, undefined, (error) => {
+            const geo = new THREE.SphereGeometry(1, 16, 16);
+            const mat = new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0xffd700 });
+            keyModel = new THREE.Mesh(geo, mat);
+            keyModel.position.copy(dropPos);
+            keyModel.position.y += 2.5;
+            scene3D.add(keyModel);
+        });
+    } else {
+        // Cập nhật số lượng còn lại
+        const count = aliveRoaches.length;
+        const names = aliveRoaches.map(r => r.userData.name).join(", ");
+        document.getElementById('gameplay-hud').innerText = `Còn ${count} con gián (${names})! Đập tiếp đi!`;
+        document.getElementById('gameplay-hud').style.color = "#fff";
     }
 }
 
